@@ -1,0 +1,50 @@
+<!-- Header: Harshit Test Subject 42 -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SYSTEM BOOT // Harshit TS-42</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <div class="brand">HARSHIT TEST SUBJECT 42</div>
+            <div class="status">STATUS: <span class="blink">ONLINE</span></div>
+        </header>
+
+        <main style="margin-top: 100px; text-align: center;">
+            <h1 style="font-size: 4rem; margin-bottom: 10px;">WELCOME TO THE MAINFRAME</h1>
+            <p id="typing-text" style="min-height: 30px; color: var(--secondary);">INITIALIZING CONNECTION...</p>
+            
+            <br><br>
+            
+            <div style="display: flex; justify-content: center; gap: 20px;">
+                <a href="experiment.html" class="btn-hack">[ INITIATE EXPERIMENT ]</a>
+                <a href="mission.html" class="btn-hack">[ VIEW MISSION LOGS ]</a>
+            </div>
+
+            <div class="panel" style="margin-top: 50px; text-align: left; max-width: 600px; margin-left: auto; margin-right: auto;">
+                <p>> SYSTEM CHECK...</p>
+                <p>> WEBCAM DRIVERS... DETECTED</p>
+                <p>> GPU ACCELERATION... ENABLED</p>
+                <p>> NEURAL LINK... <span style="color:var(--alert)">UNSTABLE</span></p>
+            </div>
+        </main>
+    </div>
+
+    <script>
+        const text = "ACCESS GRANTED. SUBJECT 42 RECOGNIZED. PREPARE FOR NEURAL SYNC.";
+        let i = 0;
+        const typeWriter = () => {
+            if (i < text.length) {
+                document.getElementById("typing-text").innerHTML += text.charAt(i);
+                i++;
+                setTimeout(typeWriter, 50);
+            }
+        }
+        setTimeout(typeWriter, 1000);
+    </script>
+</body>
+</html>

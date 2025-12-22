@@ -1,0 +1,330 @@
+<!-- Header: Harshit Test Subject 42 -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>EXPERIMENT // Harshit TS-42</title>
+    <link rel="stylesheet" href="style.css">
+    <style>
+        /* Override body for full screen canvas */
+        body { overflow: hidden; }
+        #video-input { display: none; }
+        .hud-item { margin-bottom: 10px; font-size: 0.9rem; }
+        .hud-value { color: #fff; font-weight: bold; }
+        
+        #controls-hint {
+            position: absolute;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            text-align: center;
+            width: 100%;
+            pointer-events: none;
+            z-index: 100;
+            text-shadow: 0 0 5px #000;
+        }
+    </style>
+</head>
+<body>
+
+    <!-- HUD Overlay -->
+    <div id="hud-overlay" class="panel">
+        <div style="border-bottom: 1px solid var(--primary); margin-bottom: 10px;">
+            HARSHIT TEST SUBJECT 42
+        </div>
+        <div class="hud-item">
+            SYSTEM: <span id="status" style="color: var(--alert)" class="blink">INITIALIZING...</span>
+        </div>
+        <div class="hud-item">
+            CONSTRUCT: <span id="shape-name" class="hud-value">LOADING</span>
+        </div>
+        <div class="hud-item">
+            HAND TRACKING: <span id="hand-status">SEARCHING</span>
+        </div>
+        <br>
+        <a href="index.html" style="color: var(--secondary); text-decoration: none;">[ < ABORT EXPERIMENT ]</a>
+    </div>
+
+    <div id="controls-hint">
+        <p>[ 🖐 MOVE: ROTATE ] [ 🤏 PINCH: EXPAND ] [ ✊ FIST: SWITCH SHAPE ]</p>
+    </div>
+
+    <!-- Hidden Video -->
+    <video id="video-input"></video>
+
+    <!-- Canvas Container -->
+    <div id="canvas-container"></div>
+
+    <!-- Libraries -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/control_utils/control_utils.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js"></script>
+
+    <script>
+        /**
+         * HARSHIT TEST SUBJECT 42
+         * CORE LOGIC
+         */
+
+        const PARTICLE_COUNT = 15000;
+        const CAM_FOV = 75;
+        const COLORS = [0x00ffcc, 0xff0055, 0xffee00, 0xaa00ff, 0x00aaff];
+
+        let scene, camera, renderer, particles, geometry, material;
+        let positions, targetPositions, colors, sizes;
+        let time = 0;
+        let currentShapeIndex = 0;
+        let isFist = false;
+        let lastFistTime = 0;
+        let handPosition = { x: 0, y: 0 }; 
+        let pinchStrength = 0; 
+
+        const shapes = ['SPHERE', 'HEART', 'SATURN', 'FLOWER', 'DNA HELIX'];
+
+        function init() {
+            scene = new THREE.Scene();
+            scene.fog = new THREE.FogExp2(0x0d0d0d, 0.002); // Match CSS BG
+
+            camera = new THREE.PerspectiveCamera(CAM_FOV, window.innerWidth / window.innerHeight, 0.1, 1000);
+            camera.position.z = 50;
+
+            renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.setPixelRatio(window.devicePixelRatio);
+            document.getElementById('canvas-container').appendChild(renderer.domElement);
+
+            // Particles
+            geometry = new THREE.BufferGeometry();
+            positions = new Float32Array(PARTICLE_COUNT * 3);
+            targetPositions = new Float32Array(PARTICLE_COUNT * 3);
+            colors = new Float32Array(PARTICLE_COUNT * 3);
+            sizes = new Float32Array(PARTICLE_COUNT);
+
+            const color = new THREE.Color();
+
+            for (let i = 0; i < PARTICLE_COUNT; i++) {
+                positions[i * 3] = (Math.random() - 0.5) * 100;
+                positions[i * 3 + 1] = (Math.random() - 0.5) * 100;
+                positions[i * 3 + 2] = (Math.random() - 0.5) * 100;
+
+                color.setHex(COLORS[Math.floor(Math.random() * COLORS.length)]);
+                colors[i * 3] = color.r;
+                colors[i * 3 + 1] = color.g;
+                colors[i * 3 + 2] = color.b;
+                sizes[i] = Math.random() * 2;
+            }
+
+            geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+            geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+            geometry.setAttribute('size', new THREE.BufferAttribute(sizes, 1));
+
+            material = new THREE.PointsMaterial({
+                size: 0.5,
+                vertexColors: true,
+                blending: THREE.AdditiveBlending,
+                depthWrite: false,
+                transparent: true,
+                opacity: 0.8
+            });
+
+            particles = new THREE.Points(geometry, material);
+            scene.add(particles);
+
+            calculateShape(0);
+
+            window.addEventListener('resize', onWindowResize, false);
+            initMediaPipe();
+            animate();
+        }
+
+        function calculateShape(index) {
+            const r = 20; 
+            document.getElementById('shape-name').innerText = shapes[index];
+            document.getElementById('shape-name').className = "hud-value glitch"; // Add glitch effect on change
+            setTimeout(() => document.getElementById('shape-name').className = "hud-value", 500);
+
+            for (let i = 0; i < PARTICLE_COUNT; i++) {
+                let x, y, z;
+                const u = Math.random() * Math.PI * 2;
+                const v = Math.random() * Math.PI;
+
+                switch (index) {
+                    case 0: // Sphere
+                        const sr = r + (Math.random() - 0.5) * 2;
+                        x = sr * Math.sin(v) * Math.cos(u);
+                        y = sr * Math.sin(v) * Math.sin(u);
+                        z = sr * Math.cos(v);
+                        break;
+                    case 1: // Heart
+                        const h_t = Math.random() * Math.PI * 2;
+                        const h_y = 13 * Math.cos(h_t) - 5 * Math.cos(2 * h_t) - 2 * Math.cos(3 * h_t) - Math.cos(4 * h_t);
+                        const h_scale = 1.2;
+                        const spread = (Math.random() - 0.5) * 5;
+                        y = h_y * h_scale + spread;
+                        const h_r = (16 * Math.pow(Math.sin(h_t), 3)) * h_scale;
+                        const h_phi = Math.random() * Math.PI * 2;
+                        x = h_r * Math.cos(h_phi) + spread;
+                        z = h_r * Math.sin(h_phi) + spread;
+                        break;
+                    case 2: // Saturn
+                        if (i < PARTICLE_COUNT * 0.4) {
+                            const pr = r * 0.6;
+                            x = pr * Math.sin(v) * Math.cos(u);
+                            y = pr * Math.sin(v) * Math.sin(u);
+                            z = pr * Math.cos(v);
+                        } else {
+                            const ringMin = r * 0.8;
+                            const ringMax = r * 1.8;
+                            const ringR = ringMin + Math.random() * (ringMax - ringMin);
+                            const ringT = Math.random() * Math.PI * 2;
+                            x = ringR * Math.cos(ringT);
+                            z = ringR * Math.sin(ringT);
+                            y = (Math.random() - 0.5) * 1.5;
+                        }
+                        break;
+                    case 3: // Flower
+                        const f_rad = r * (1 + 0.5 * Math.sin(5 * u) * Math.sin(5 * v));
+                        x = f_rad * Math.sin(v) * Math.cos(u);
+                        y = f_rad * Math.sin(v) * Math.sin(u);
+                        z = f_rad * Math.cos(v);
+                        break;
+                    case 4: // DNA
+                        const dna_h = (Math.random() - 0.5) * 60;
+                        const dna_r = 10;
+                        const turns = 4;
+                        const angle = (dna_h + 30) * 0.2 * turns;
+                        const strand = Math.random() > 0.5 ? 0 : Math.PI;
+                        x = dna_r * Math.cos(angle + strand) + (Math.random()-0.5)*3;
+                        z = dna_r * Math.sin(angle + strand) + (Math.random()-0.5)*3;
+                        y = dna_h;
+                        break;
+                }
+                targetPositions[i * 3] = x;
+                targetPositions[i * 3 + 1] = y;
+                targetPositions[i * 3 + 2] = z;
+            }
+        }
+
+        function animate() {
+            requestAnimationFrame(animate);
+            time += 0.01;
+            
+            const posAttribute = geometry.attributes.position;
+            const colorAttribute = geometry.attributes.color;
+
+            // Hand Rotation
+            const targetRotationY = handPosition.x * 2;
+            const targetRotationX = handPosition.y * 2;
+            particles.rotation.y += (targetRotationY - particles.rotation.y) * 0.05;
+            particles.rotation.x += (targetRotationX - particles.rotation.x) * 0.05;
+
+            // Auto rotate if idle
+            if(pinchStrength < 0.1) particles.rotation.y += 0.002;
+
+            const expansion = 1 + (pinchStrength * 2);
+
+            for (let i = 0; i < PARTICLE_COUNT; i++) {
+                const ix = i * 3;
+                const tx = targetPositions[ix] * expansion;
+                const ty = targetPositions[ix+1] * expansion;
+                const tz = targetPositions[ix+2] * expansion;
+
+                posAttribute.array[ix] += (tx - posAttribute.array[ix]) * 0.05;
+                posAttribute.array[ix+1] += (ty - posAttribute.array[ix+1]) * 0.05;
+                posAttribute.array[ix+2] += (tz - posAttribute.array[ix+2]) * 0.05;
+
+                // Color shift on pinch
+                if (pinchStrength > 0.5) {
+                    colorAttribute.array[ix] = 1; // R
+                    colorAttribute.array[ix+1] = 0; // G
+                } else {
+                    // Gradual return to random
+                     colorAttribute.array[ix+1] += (0.5 - colorAttribute.array[ix+1]) * 0.01;
+                }
+            }
+
+            posAttribute.needsUpdate = true;
+            colorAttribute.needsUpdate = true;
+            renderer.render(scene, camera);
+        }
+
+        function onWindowResize() {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        }
+
+        function initMediaPipe() {
+            const videoElement = document.getElementById('video-input');
+            const hands = new Hands({locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`});
+            
+            hands.setOptions({
+                maxNumHands: 1,
+                modelComplexity: 1,
+                minDetectionConfidence: 0.5,
+                minTrackingConfidence: 0.5
+            });
+
+            hands.onResults(onHandsResults);
+
+            const cameraUtils = new Camera(videoElement, {
+                onFrame: async () => { await hands.send({image: videoElement}); },
+                width: 640,
+                height: 480
+            });
+            
+            cameraUtils.start()
+                .then(() => {
+                    document.getElementById('status').innerText = "CAMERA LOCKED";
+                    document.getElementById('status').style.color = "var(--primary)";
+                    document.getElementById('status').classList.remove('blink');
+                })
+                .catch(err => document.getElementById('status').innerText = "ERR: " + err);
+        }
+
+        function onHandsResults(results) {
+            const handStatus = document.getElementById('hand-status');
+            
+            if (results.multiHandLandmarks && results.multiHandLandmarks.length > 0) {
+                handStatus.innerText = "LOCKED";
+                handStatus.style.color = "var(--primary)";
+                
+                const landmarks = results.multiHandLandmarks[0];
+                const x = (landmarks[9].x - 0.5) * -2;
+                const y = (landmarks[9].y - 0.5) * -2;
+                
+                handPosition.x += (x - handPosition.x) * 0.1;
+                handPosition.y += (y - handPosition.y) * 0.1;
+
+                // Pinch
+                const thumbTip = landmarks[4];
+                const indexTip = landmarks[8];
+                const distance = Math.hypot(thumbTip.x - indexTip.x, thumbTip.y - indexTip.y);
+                if (distance < 0.05) pinchStrength = Math.min(pinchStrength + 0.1, 1);
+                else pinchStrength = Math.max(pinchStrength - 0.1, 0);
+
+                // Fist
+                const isFingerDown = (tip, pip) => landmarks[tip].y > landmarks[pip].y; 
+                if (isFingerDown(8,6) && isFingerDown(12,10) && isFingerDown(16,14) && isFingerDown(20,18)) {
+                    if (!isFist && Date.now() - lastFistTime > 1000) {
+                        currentShapeIndex = (currentShapeIndex + 1) % shapes.length;
+                        calculateShape(currentShapeIndex);
+                        lastFistTime = Date.now();
+                    }
+                    isFist = true;
+                } else {
+                    isFist = false;
+                }
+            } else {
+                handStatus.innerText = "SEARCHING...";
+                handStatus.style.color = "var(--alert)";
+            }
+        }
+
+        init();
+    </script>
+</body>
+</html>
